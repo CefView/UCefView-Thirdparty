@@ -1,0 +1,180 @@
+name: Build All-in-one
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  build_windows_x64:
+    name: Build for Windows (x64)
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: ./Update-Win64.ps1
+        shell: pwsh
+        working-directory: ./scripts
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-windows-x64
+          path: output/CefViewCore/
+
+  build_macos_universal:
+    name: Build for macOS (x64 & ARM64)
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select specific Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "15.4"
+      - name: Verify Xcode version
+        run: xcodebuild -version
+
+      - name: Build
+        run: |
+          chmod +x Update-Mac.sh
+          ./Update-Mac.sh
+        shell: bash
+        working-directory: ./scripts
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-macos-universal
+          path: output/CefViewCore/
+
+  build_linux_x64:
+    name: Build for Linux (x64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang cmake git libc++-dev libc++abi-dev libx11-dev
+
+      - name: Build
+        run: |
+          chmod +x Update-Linux.sh
+          ./Update-Linux.sh
+        shell: bash
+        working-directory: ./scripts
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-linux-x64
+          path: output/CefViewCore/
+
+  build_linux_arm64:
+    name: Build for Linux (ARM64)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang cmake git libc++-dev libc++abi-dev libx11-dev
+
+      - name: Build
+        run: |
+          chmod +x Update-LinuxArm64.sh
+          ./Update-LinuxArm64.sh
+        working-directory: ./scripts
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-linux-arm64
+          path: output/CefViewCore/
+
+  package:
+    name: Package All-in-one Artifact
+    needs:
+      [
+        build_windows_x64,
+        build_macos_universal,
+        build_linux_x64,
+        build_linux_arm64,
+      ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Combine artifacts
+        run: |
+          mkdir -p final_artifact
+          # Recursively copy the contents of each artifact directory
+          # The -n/--no-clobber option prevents overwriting files, although conflicts should not happen with this structure
+          cp -rT artifacts/build-windows-x64 final_artifact
+          cp -rT artifacts/build-macos-universal final_artifact
+          cp -rT artifacts/build-linux-x64 final_artifact
+          cp -rT artifacts/build-linux-arm64 final_artifact
+
+      - name: Create Version File
+        run: cp scripts/ThirdParty-Config.txt final_artifact/VERSION
+
+      - name: Upload final artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CefViewCore-binaries
+          path: final_artifact/
+
+  release:
+    name: Create GitHub Release
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download CefViewCore-binaries artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: CefViewCore-binaries
+          path: CefViewCore-binaries
+
+      - name: Get versions from config file
+        id: versions
+        run: |
+          CEF_VERSION=$(grep "CEF_VERSION=" scripts/ThirdParty-Config.txt | cut -d'=' -f2)
+          CORE_VERSION=$(grep "CORE_VERSION=" scripts/ThirdParty-Config.txt | cut -d'=' -f2)
+          CEF_VERSION_MAJOR_MINOR_PATCH=$(echo "$CEF_VERSION" | cut -d'+' -f1)
+          CORE_VERSION_SHORT=$(echo "$CORE_VERSION" | cut -c1-7)
+          TAG_NAME="${CEF_VERSION_MAJOR_MINOR_PATCH}+${CORE_VERSION_SHORT}"
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          echo "zip_name=CefViewCore-binaries-${TAG_NAME}.zip" >> $GITHUB_OUTPUT
+
+      - name: Zip the artifact
+        run: |
+          cd CefViewCore-binaries
+          zip -r ../${{ steps.versions.outputs.zip_name }} .
+          cd ..
+        shell: bash
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.versions.outputs.tag_name }}
+          files: ${{ steps.versions.outputs.zip_name }}

@@ -1,0 +1,3 @@
+﻿scripts/Work
+output/CefViewCore/**
+!output/CefViewCore/VERSION

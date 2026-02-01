@@ -1,0 +1,5 @@
+CORE_REPO=https://github.com/CefView/CefViewCore.git
+CORE_VERSION=f2089f2091fddab7c9642256f0d7c717f9de830e
+CORE_BUILD_TYPE=Release
+CEF_HELPER_NAME=UCefViewHelper
+CEF_VERSION=126.2.18+g3647d39+chromium-126.0.6478.183
