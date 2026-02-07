@@ -49,6 +49,7 @@ cmake -G "Xcode" \
       -DUSE_SANDBOX=ON \
       -DCEF_SDK_VERSION=$CEF_VERSION \
       -DCEFVIEW_WING_NAME=$CEF_HELPER_NAME \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET="11.0" \
       -B "$SOURCE_DIR/build/mac.x86_64" \
       --fresh
 
@@ -75,6 +76,7 @@ cmake -G "Xcode" \
       -DUSE_SANDBOX=ON \
       -DCEF_SDK_VERSION=$CEF_VERSION \
       -DCEFVIEW_WING_NAME=$CEF_HELPER_NAME \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET="11.0" \
       -B "$SOURCE_DIR/build/mac.arm64" \
       --fresh
 
